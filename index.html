@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Тапсырма тапсыру және нәтижені тексеру жүйесі</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto 30px auto;
+      background: #ffffff;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-top: 0;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #555;
+    }
+    input[type="text"], textarea, input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    textarea {
+      height: 100px;
+      resize: vertical;
+    }
+    button {
+      width: 100%;
+      background-color: #4CAF50;
+      color: white;
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .btn-check {
+      background-color: #2196F3;
+    }
+    .btn-check:hover {
+      background-color: #0b7dda;
+    }
+    #status, #resultBox {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 6px;
+      display: none;
+      text-align: center;
+      font-weight: bold;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .loading {
+      background-color: #e2e3e5;
+      color: #383d41;
+    }
+    .result-details {
+      text-align: left;
+      margin-top: 10px;
+      font-weight: normal;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 1-БЛОК: ТАПСЫРМА ЖІБЕРУ -->
+<div class="container">
+  <h2>Тапсырма жіберу</h2>
+  
+  <form id="taskForm">
+    <div class="form-group">
+      <label for="studentName">Оқушының аты-жөні:</label>
+      <input type="text" id="studentName" required placeholder="Мысалы: Сандуғаш">
+    </div>
+
+    <div class="form-group">
+      <label for="studentGrade">Сыныбы:</label>
+      <input type="text" id="studentGrade" required placeholder="Мысалы: 8A">
+    </div>
+
+    <div class="form-group">
+      <label for="studentAnswer">Тапсырма жауабы (текст):</label>
+      <textarea id="studentAnswer" placeholder="Жауабыңызды осында жазыңыз..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="fileInput">Сурет / Файл тіркеу (міндетті емес):</label>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <button type="button" id="submitBtn" onclick="submitTask()">Тапсырманы жіберу</button>
+  </form>
+
+  <div id="status"></div>
+</div>
+
+<!-- 2-БЛОК: ЖАУАПТЫ/НӘТИЖЕНІ ТЕКСЕРУ ОКНОСЫ -->
+<div class="container">
+  <h2>Нәтижені тексеру</h2>
+  
+  <div class="form-group">
+    <label for="searchId">Сіздің ID кодыңыз:</label>
+    <input type="text" id="searchId" placeholder="Мысалы: ID-4821">
+  </div>
+
+  <button type="button" class="btn-check" id="checkBtn" onclick="checkResult()">Нәтижені көру</button>
+
+  <div id="resultBox"></div>
+</div>
+
+<script>
+  // Google Apps Script-тен алған Веб-приложение сілтемесін осы жерге қойыңыз:
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxk3wApuy7SjwHNOfgsb0nZEarT1IuQgTJnfEOTWSjq9u-1Z-mOHTxn4xmd63sgJxtT/exec";
+
+  // --- 1. ТАПСЫРМА ЖІБЕРУ ФУНКЦИЯСЫ ---
+  async function submitTask() {
+    const name = document.getElementById('studentName').value.trim();
+    const grade = document.getElementById('studentGrade').value.trim();
+    const answer = document.getElementById('studentAnswer').value.trim();
+    const fileInput = document.getElementById('fileInput');
+    const submitBtn = document.getElementById('submitBtn');
+
+    if (!name || !grade) {
+      alert("Өтініш, аты-жөніңізді және сыныбыңызды толық жазыңыз!");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    showStatus("Тапсырма жіберілуде, күте тұрыңыз...", "loading");
+
+    let imageUrl = "Сурет жүктелмеді";
+
+    // Суретті ImgBB хостингіне жүктеу
+    if (fileInput.files.length > 0) {
+      try {
+        const formData = new FormData();
+        formData.append("image", fileInput.files[0]);
+
+        const imgbbResponse = await fetch("https://api.imgbb.com/1/upload?key=6d207e02198a847aa98d0a2a901485a5", {
+          method: "POST",
+          body: formData
+        });
+
+        const imgbbResult = await imgbbResponse.json();
+        if (imgbbResult.success && imgbbResult.data && imgbbResult.data.url) {
+          imageUrl = imgbbResult.data.url;
+        }
+      } catch (err) {
+        console.error("Сурет жүктеу қатесі:", err);
+      }
+    }
+
+    // Деректерді Google Таблицаға бағыттау
+    const payload = {
+      name: name,
+      grade: grade,
+      answer: answer,
+      fileUrl: imageUrl
+    };
+
+    try {
+      const response = await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (result.result === "success") {
+        showStatus("Тапсырма сәтті жіберілді! Сіздің ID-іңіз: " + result.id, "success");
+        document.getElementById('taskForm').reset();
+      } else {
+        showStatus("Қателік орын алды. Қайталап көріңіз.", "error");
+      }
+    } catch (error) {
+      console.error("Өңдеу қатесі:", error);
+      showStatus("Сервермен байланысу мүмкін болмады.", "error");
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  // --- 2. ЖАУАПТЫ ТЕКСЕРУ ФУНКЦИЯСЫ ---
+  async function checkResult() {
+    const searchId = document.getElementById('searchId').value.trim();
+    const resultBox = document.getElementById('resultBox');
+    const checkBtn = document.getElementById('checkBtn');
+
+    if (!searchId) {
+      alert("Өтініш, ID кодыңызды енгізіңіз!");
+      return;
+    }
+
+    checkBtn.disabled = true;
+    resultBox.style.display = "block";
+    resultBox.className = "loading";
+    resultBox.innerText = "Нәтиже ізделуде...";
+
+    try {
+      const response = await fetch(SCRIPT_URL + "?id=" + encodeURIComponent(searchId));
+      const data = await response.json();
+
+      if (data.found) {
+        resultBox.className = "success";
+        resultBox.innerHTML = `
+          <strong>${data.name}</strong> үшін нәтиже:<br>
+          <div class="result-details">
+            <p><strong>Балл:</strong> ${data.score ? data.score : "Әлі бағаланбады"}</p>
+            <p><strong>Мұғалім комментарийі:</strong> ${data.comment ? data.comment : "Пікір жазылмаған"}</p>
+          </div>
+        `;
+      } else {
+        resultBox.className = "error";
+        resultBox.innerText = "Мұндай ID табылмады. Кодты тексеріп қайта енгізіңіз.";
+      }
+    } catch (error) {
+      console.error("Іздеу қатесі:", error);
+      resultBox.className = "error";
+      resultBox.innerText = "Нәтижені алу мүмкін болмады.";
+    } finally {
+      checkBtn.disabled = false;
+    }
+  }
+
+  function showStatus(message, className) {
+    const statusDiv = document.getElementById('status');
+    statusDiv.style.display = "block";
+    statusDiv.className = className;
+    statusDiv.innerText = message;
+  }
+</script>
+
+</body>
+</html>
